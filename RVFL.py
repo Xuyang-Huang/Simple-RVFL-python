@@ -128,8 +128,6 @@ class Activation:
         return np.maximum(0, x)
 
 
-
-
 def prepare_data(proportion):
     iris_dataset = load_iris()
     label = iris_dataset['target']
