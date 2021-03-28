@@ -11,7 +11,8 @@ from sklearn.datasets import load_iris
 
 num_nides = 20  # Number of enhancement nodes.
 regular_para = 0.05  # Regularization parameter.
-random_range = [-1, 1]  # Range of random weights.
+weight_random_range = [-1, 1]  # Range of random weights.
+bias_random_range = [0, 1]  # Range of random weights.
 
 
 class RVFL:
@@ -20,16 +21,18 @@ class RVFL:
     Attributes:
         n_nodes: An integer of enhancement node number.
         lam: A floating number of regularization parameter.
-        random_range: A list, [min, max], the range of generating random weights or bias.
+        w_random_vec_range: A list, [min, max], the range of generating random weights.
+        b_random_vec_range: A list, [min, max], the range of generating random bias.
         random_weights: A Numpy array shape is [n_feature, n_nodes], weights of neuron.
         random_bias: A Numpy array shape is [n_nodes], bias of neuron.
         beta: A Numpy array shape is [n_feature + n_nodes, n_class], the projection matrix.
         activation: A string of activation name.
     """
-    def __init__(self, n_nodes, lam, random_vec_range, activation):
+    def __init__(self, n_nodes, lam, w_random_vec_range, b_random_vec_range, activation):
         self.n_nodes = n_nodes
         self.lam = lam
-        self.random_range = random_vec_range
+        self.w_random_range = w_random_vec_range
+        self.b_random_range = b_random_vec_range
         self.random_weights = None
         self.random_bias = None
         self.beta = None
@@ -50,8 +53,8 @@ class RVFL:
         data = self.normalize(data)  # Normalization data
         n_sample = len(data)
         n_feature = len(data[0])
-        self.random_weights = self.get_random_vectors(n_feature, self.n_nodes, self.random_range)
-        self.random_bias = self.get_random_vectors(1, self.n_nodes, self.random_range)
+        self.random_weights = self.get_random_vectors(n_feature, self.n_nodes, self.w_random_range)
+        self.random_bias = self.get_random_vectors(1, self.n_nodes, self.b_random_range)
 
         h = self.activation_function(np.dot(data, self.random_weights) + np.dot(np.ones([n_sample, 1]), self.random_bias))
         d = np.concatenate([h, data], axis=1)
@@ -149,7 +152,7 @@ def prepare_data(proportion):
 
 if __name__ == '__main__':
     train, val, num_class = prepare_data(0.9)
-    rvfl = RVFL(num_nides, regular_para, random_range, 'relu')
+    rvfl = RVFL(num_nides, regular_para, weight_random_range, bias_random_range, 'relu')
     rvfl.train(train[0], train[1])
     prediction = rvfl.predict(val[0], output_prob=False)
     accuracy = rvfl.eval(val[0], val[1])
