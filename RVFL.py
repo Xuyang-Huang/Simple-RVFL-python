@@ -38,6 +38,8 @@ class RVFL:
         self.beta = None
         a = Activation()
         self.activation_function = getattr(a, activation)
+        self.data_std = None
+        self.data_mean = None
 
     def train(self, data, label):
         """
@@ -105,7 +107,11 @@ class RVFL:
         return y
 
     def normalize(self, x):
-        return (x - np.mean(x)) / np.std(x)
+        if self.data_std is None:
+            self.data_std = np.std(x)
+        if self.data_mean is None:
+            self.data_mean = np.mean(x)
+        return (x - self.data_mean) / self.data_std
 
 
 class Activation:
@@ -156,3 +162,4 @@ if __name__ == '__main__':
     rvfl.train(train[0], train[1])
     prediction = rvfl.predict(val[0], output_prob=False)
     accuracy = rvfl.eval(val[0], val[1])
+
