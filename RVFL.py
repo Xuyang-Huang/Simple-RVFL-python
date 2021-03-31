@@ -6,13 +6,13 @@
 #@Software: PyCharm
 
 import numpy as np
-from sklearn.datasets import load_iris
+import sklearn.datasets as sk_dataset
 
 
-num_nides = 20  # Number of enhancement nodes.
-regular_para = 0.05  # Regularization parameter.
+num_nides = 40  # Number of enhancement nodes.
+regular_para = 0.01  # Regularization parameter.
 weight_random_range = [-1, 1]  # Range of random weights.
-bias_random_range = [0, 1]  # Range of random weights.
+bias_random_range = [-1, 1]  # Range of random weights.
 
 
 class RVFL:
@@ -27,8 +27,11 @@ class RVFL:
         random_bias: A Numpy array shape is [n_nodes], bias of neuron.
         beta: A Numpy array shape is [n_feature + n_nodes, n_class], the projection matrix.
         activation: A string of activation name.
+        data_std: A list, store normalization parameters for each layer.
+        data_mean: A list, store normalization parameters for each layer.
+        same_feature: A bool, the true means all the features have same meaning and boundary for example: images.
     """
-    def __init__(self, n_nodes, lam, w_random_vec_range, b_random_vec_range, activation):
+    def __init__(self, n_nodes, lam, w_random_vec_range, b_random_vec_range, activation, same_feature=False):
         self.n_nodes = n_nodes
         self.lam = lam
         self.w_random_range = w_random_vec_range
@@ -40,19 +43,22 @@ class RVFL:
         self.activation_function = getattr(a, activation)
         self.data_std = None
         self.data_mean = None
+        self.same_feature = same_feature
 
-    def train(self, data, label):
+    def train(self, data, label, n_class):
         """
 
         :param data: Training data.
         :param label: Training label.
+        :param n_class: An integer of number of class.
         :return: No return
         """
 
-        assert len(data.shape) > 1, f'data shape should be [n, dim].'
-        assert len(data) == len(label), f'label number does not match data number.'
+        assert len(data.shape) > 1, 'Data shape should be [n, dim].'
+        assert len(data) == len(label), 'Label number does not match data number.'
+        assert len(label.shape) == 1, 'Label should be 1-D array.'
 
-        data = self.normalize(data)  # Normalization data
+        data = self.standardize(data)  # Normalization data
         n_sample = len(data)
         n_feature = len(data[0])
         self.random_weights = self.get_random_vectors(n_feature, self.n_nodes, self.w_random_range)
@@ -60,7 +66,7 @@ class RVFL:
 
         h = self.activation_function(np.dot(data, self.random_weights) + np.dot(np.ones([n_sample, 1]), self.random_bias))
         d = np.concatenate([h, data], axis=1)
-        y = self.one_hot(label, num_class)
+        y = self.one_hot(label, n_class)
         if n_sample > (self.n_nodes + n_feature):
             self.beta = np.linalg.inv((self.lam * np.identity(n_feature + self.n_nodes) + np.dot(d.T, d))).dot(d.T).dot(y)
         else:
@@ -73,7 +79,7 @@ class RVFL:
         :param output_prob: A bool number, if True return the raw predict probability, if False return predict class.
         :return: Prediction result.
         """
-        data = self.normalize(data)  # Normalization data
+        data = self.standardize(data)  # Normalization data
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
         result = np.dot(d, self.beta)
@@ -88,7 +94,12 @@ class RVFL:
         :param label: Evaluation label.
         :return: Accuracy.
         """
-        data = self.normalize(data)  # Normalization data
+
+        assert len(data.shape) > 1, 'Data shape should be [n, dim].'
+        assert len(data) == len(label), 'Label number does not match data number.'
+        assert len(label.shape) == 1, 'Label should be 1-D array.'
+
+        data = self.standardize(data)  # Normalization data
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
         result = np.dot(d, self.beta)
@@ -106,12 +117,19 @@ class RVFL:
             y[i, x[i]] = 1
         return y
 
-    def normalize(self, x):
-        if self.data_std is None:
-            self.data_std = np.std(x)
-        if self.data_mean is None:
-            self.data_mean = np.mean(x)
-        return (x - self.data_mean) / self.data_std
+    def standardize(self, x):
+        if self.same_feature is True:
+            if self.data_std is None:
+                self.data_std = np.std(x)
+            if self.data_mean is None:
+                self.data_mean = np.mean(x)
+            return (x - self.data_mean) / self.data_std
+        else:
+            if self.data_std is None:
+                self.data_std = np.std(x, axis=0)
+            if self.data_mean is None:
+                self.data_mean = np.mean(x, axis=0)
+            return (x - self.data_mean) / self.data_std
 
 
 class Activation:
@@ -138,10 +156,10 @@ class Activation:
 
 
 def prepare_data(proportion):
-    iris_dataset = load_iris()
-    label = iris_dataset['target']
-    data = iris_dataset['data']
-    n_class = len(iris_dataset['target_names'])
+    dataset = sk_dataset.load_wine()
+    label = dataset['target']
+    data = dataset['data']
+    n_class = len(dataset['target_names'])
 
     shuffle_index = np.arange(len(label))
     np.random.shuffle(shuffle_index)
@@ -158,8 +176,8 @@ def prepare_data(proportion):
 
 if __name__ == '__main__':
     train, val, num_class = prepare_data(0.9)
-    rvfl = RVFL(num_nides, regular_para, weight_random_range, bias_random_range, 'relu')
-    rvfl.train(train[0], train[1])
+    rvfl = RVFL(num_nides, regular_para, weight_random_range, bias_random_range, 'relu', False)
+    rvfl.train(train[0], train[1], num_class)
     prediction = rvfl.predict(val[0], output_prob=False)
     accuracy = rvfl.eval(val[0], val[1])
 
