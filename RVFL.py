@@ -9,10 +9,10 @@ import numpy as np
 import sklearn.datasets as sk_dataset
 
 
-num_nides = 40  # Number of enhancement nodes.
-regular_para = 0.01  # Regularization parameter.
+num_nides = 10  # Number of enhancement nodes.
+regular_para = 1  # Regularization parameter.
 weight_random_range = [-1, 1]  # Range of random weights.
-bias_random_range = [-1, 1]  # Range of random weights.
+bias_random_range = [0, 1]  # Range of random weights.
 
 
 class RVFL:
@@ -66,9 +66,10 @@ class RVFL:
 
         h = self.activation_function(np.dot(data, self.random_weights) + np.dot(np.ones([n_sample, 1]), self.random_bias))
         d = np.concatenate([h, data], axis=1)
+        d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
         y = self.one_hot(label, n_class)
         if n_sample > (self.n_nodes + n_feature):
-            self.beta = np.linalg.inv((self.lam * np.identity(n_feature + self.n_nodes) + np.dot(d.T, d))).dot(d.T).dot(y)
+            self.beta = np.linalg.inv((self.lam * np.identity(d.shape[1]) + np.dot(d.T, d))).dot(d.T).dot(y)
         else:
             self.beta = d.T.dot(np.linalg.inv(self.lam * np.identity(n_sample) + np.dot(d, d.T))).dot(y)
 
@@ -82,7 +83,8 @@ class RVFL:
         data = self.standardize(data)  # Normalization data
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
-        result = np.dot(d, self.beta)
+        d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
+        result = self.softmax(np.dot(d, self.beta))
         if not output_prob:
             result = np.argmax(result, axis=1)
         return result
@@ -102,6 +104,7 @@ class RVFL:
         data = self.standardize(data)  # Normalization data
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
+        d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
         result = np.dot(d, self.beta)
         result = np.argmax(result, axis=1)
         acc = np.sum(np.equal(result, label))/len(label)
@@ -120,16 +123,20 @@ class RVFL:
     def standardize(self, x):
         if self.same_feature is True:
             if self.data_std is None:
-                self.data_std = np.std(x)
+                self.data_std = np.maximum(np.std(x), 1/np.sqrt(len(x)))
             if self.data_mean is None:
                 self.data_mean = np.mean(x)
             return (x - self.data_mean) / self.data_std
         else:
             if self.data_std is None:
-                self.data_std = np.std(x, axis=0)
+                self.data_std = np.maximum(np.std(x, axis=0), 1/np.sqrt(len(x)))
             if self.data_mean is None:
                 self.data_mean = np.mean(x, axis=0)
             return (x - self.data_mean) / self.data_std
+
+
+    def softmax(self, x):
+        return np.exp(x) / np.repeat((np.sum(np.exp(x), axis=1))[:, np.newaxis], len(x[0]), axis=1)
 
 
 class Activation:
@@ -156,7 +163,7 @@ class Activation:
 
 
 def prepare_data(proportion):
-    dataset = sk_dataset.load_wine()
+    dataset = sk_dataset.load_breast_cancer()
     label = dataset['target']
     data = dataset['data']
     n_class = len(dataset['target_names'])
@@ -175,9 +182,10 @@ def prepare_data(proportion):
 
 
 if __name__ == '__main__':
-    train, val, num_class = prepare_data(0.9)
+    train, val, num_class = prepare_data(0.8)
     rvfl = RVFL(num_nides, regular_para, weight_random_range, bias_random_range, 'relu', False)
     rvfl.train(train[0], train[1], num_class)
-    prediction = rvfl.predict(val[0], output_prob=False)
+    prediction = rvfl.predict(val[0], output_prob=True)
     accuracy = rvfl.eval(val[0], val[1])
+    print(accuracy)
 
