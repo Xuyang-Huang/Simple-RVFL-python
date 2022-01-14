@@ -77,7 +77,6 @@ class RVFL:
         """
 
         :param data: Predict data.
-        :param output_prob: A bool number, if True return the raw predict probability, if False return predict class.
         :return: When classification, return Prediction result and probability.
                  When regression, return the output of rvfl.
         """
