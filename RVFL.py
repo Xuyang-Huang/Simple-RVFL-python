@@ -6,17 +6,10 @@
 #@Software: PyCharm
 
 import numpy as np
-import sklearn.datasets as sk_dataset
-
-
-num_nides = 10  # Number of enhancement nodes.
-regular_para = 1  # Regularization parameter.
-weight_random_range = [-1, 1]  # Range of random weights.
-bias_random_range = [0, 1]  # Range of random weights.
 
 
 class RVFL:
-    """A simple RVFL classifier.
+    """A simple RVFL classifier or regression.
 
     Attributes:
         n_nodes: An integer of enhancement node number.
@@ -30,8 +23,11 @@ class RVFL:
         data_std: A list, store normalization parameters for each layer.
         data_mean: A list, store normalization parameters for each layer.
         same_feature: A bool, the true means all the features have same meaning and boundary for example: images.
+        task_type: A string of ML task type, 'classification' or 'regression'.
     """
-    def __init__(self, n_nodes, lam, w_random_vec_range, b_random_vec_range, activation, same_feature=False):
+    def __init__(self, n_nodes, lam, w_random_vec_range, b_random_vec_range, activation, same_feature=False,
+                 task_type='classification'):
+        assert task_type in ['classification', 'regression'], 'task_type should be "classification" or "regression".'
         self.n_nodes = n_nodes
         self.lam = lam
         self.w_random_range = w_random_vec_range
@@ -44,13 +40,14 @@ class RVFL:
         self.data_std = None
         self.data_mean = None
         self.same_feature = same_feature
+        self.task_type = task_type
 
     def train(self, data, label, n_class):
         """
 
         :param data: Training data.
         :param label: Training label.
-        :param n_class: An integer of number of class.
+        :param n_class: An integer of number of class. In regression, this parameter won't be used.
         :return: No return
         """
 
@@ -67,34 +64,42 @@ class RVFL:
         h = self.activation_function(np.dot(data, self.random_weights) + np.dot(np.ones([n_sample, 1]), self.random_bias))
         d = np.concatenate([h, data], axis=1)
         d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
-        y = self.one_hot(label, n_class)
+        if self.task_type == 'classification':
+            y = self.one_hot(label, n_class)
+        else:
+            y = label
         if n_sample > (self.n_nodes + n_feature):
             self.beta = np.linalg.inv((self.lam * np.identity(d.shape[1]) + np.dot(d.T, d))).dot(d.T).dot(y)
         else:
             self.beta = d.T.dot(np.linalg.inv(self.lam * np.identity(n_sample) + np.dot(d, d.T))).dot(y)
 
-    def predict(self, data, output_prob=False):
+    def predict(self, data):
         """
 
         :param data: Predict data.
         :param output_prob: A bool number, if True return the raw predict probability, if False return predict class.
-        :return: Prediction result.
+        :return: When classification, return Prediction result and probability.
+                 When regression, return the output of rvfl.
         """
         data = self.standardize(data)  # Normalization data
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
         d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
-        result = self.softmax(np.dot(d, self.beta))
-        if not output_prob:
-            result = np.argmax(result, axis=1)
-        return result
+        output = np.dot(d, self.beta)
+        if self.task_type == 'classification':
+            proba = self.softmax(output)
+            result = np.argmax(proba, axis=1)
+            return result, proba
+        elif self.task_type == 'regression':
+            return output
 
     def eval(self, data, label):
         """
 
         :param data: Evaluation data.
         :param label: Evaluation label.
-        :return: Accuracy.
+        :return: When classification return accuracy.
+                 When regression return MAE.
         """
 
         assert len(data.shape) > 1, 'Data shape should be [n, dim].'
@@ -105,16 +110,22 @@ class RVFL:
         h = self.activation_function(np.dot(data, self.random_weights) + self.random_bias)
         d = np.concatenate([h, data], axis=1)
         d = np.concatenate([d, np.ones_like(d[:, 0:1])], axis=1)
-        result = np.dot(d, self.beta)
-        result = np.argmax(result, axis=1)
-        acc = np.sum(np.equal(result, label))/len(label)
-        return acc
+        output = np.dot(d, self.beta)
+        if self.task_type == 'classification':
+            result = np.argmax(output, axis=1)
+            acc = np.sum(np.equal(result, label)) / len(label)
+            return acc
+        elif self.task_type == 'regression':
+            mae = np.mean(np.abs(output - label))
+            return mae
 
-    def get_random_vectors(self, m, n, scale_range):
+    @staticmethod
+    def get_random_vectors(m, n, scale_range):
         x = (scale_range[1] - scale_range[0]) * np.random.random([m, n]) + scale_range[0]
         return x
 
-    def one_hot(self, x, n_class):
+    @staticmethod
+    def one_hot(x, n_class):
         y = np.zeros([len(x), n_class])
         for i in range(len(x)):
             y[i, x[i]] = 1
@@ -134,58 +145,107 @@ class RVFL:
                 self.data_mean = np.mean(x, axis=0)
             return (x - self.data_mean) / self.data_std
 
-
-    def softmax(self, x):
+    @staticmethod
+    def softmax(x):
         return np.exp(x) / np.repeat((np.sum(np.exp(x), axis=1))[:, np.newaxis], len(x[0]), axis=1)
 
 
 class Activation:
-    def sigmoid(self, x):
+    @staticmethod
+    def sigmoid(x):
         return 1 / (1 + np.e ** (-x))
 
-    def sine(self, x):
+    @staticmethod
+    def sine(x):
         return np.sin(x)
 
-    def hardlim(self, x):
+    @staticmethod
+    def hardlim(x):
         return (np.sign(x) + 1) / 2
 
-    def tribas(self, x):
+    @staticmethod
+    def tribas(x):
         return np.maximum(1 - np.abs(x), 0)
 
-    def radbas(self, x):
+    @staticmethod
+    def radbas(x):
         return np.exp(-(x**2))
 
-    def sign(self, x):
+    @staticmethod
+    def sign(x):
         return np.sign(x)
 
-    def relu(self, x):
+    @staticmethod
+    def relu(x):
         return np.maximum(0, x)
 
 
-def prepare_data(proportion):
-    dataset = sk_dataset.load_breast_cancer()
-    label = dataset['target']
-    data = dataset['data']
-    n_class = len(dataset['target_names'])
-
-    shuffle_index = np.arange(len(label))
-    np.random.shuffle(shuffle_index)
-
-    train_number = int(proportion * len(label))
-    train_index = shuffle_index[:train_number]
-    val_index = shuffle_index[train_number:]
-    data_train = data[train_index]
-    label_train = label[train_index]
-    data_val = data[val_index]
-    label_val = label[val_index]
-    return (data_train, label_train), (data_val, label_val), n_class
-
-
 if __name__ == '__main__':
-    train, val, num_class = prepare_data(0.8)
-    rvfl = RVFL(num_nides, regular_para, weight_random_range, bias_random_range, 'relu', False)
-    rvfl.train(train[0], train[1], num_class)
-    prediction = rvfl.predict(val[0], output_prob=True)
-    accuracy = rvfl.eval(val[0], val[1])
-    print(accuracy)
+    import sklearn.datasets as sk_dataset
+
+
+    def prepare_data_classify(proportion):
+        dataset = sk_dataset.load_breast_cancer()
+        label = dataset['target']
+        data = dataset['data']
+        n_class = len(dataset['target_names'])
+
+        shuffle_index = np.arange(len(label))
+        np.random.shuffle(shuffle_index)
+
+        train_number = int(proportion * len(label))
+        train_index = shuffle_index[:train_number]
+        val_index = shuffle_index[train_number:]
+        data_train = data[train_index]
+        label_train = label[train_index]
+        data_val = data[val_index]
+        label_val = label[val_index]
+        return (data_train, label_train), (data_val, label_val), n_class
+
+    def prepare_data_regression(proportion):
+        dataset = sk_dataset.load_diabetes()
+        label = dataset['target']
+        data = dataset['data']
+
+        shuffle_index = np.arange(len(label))
+        np.random.shuffle(shuffle_index)
+
+        train_number = int(proportion * len(label))
+        train_index = shuffle_index[:train_number]
+        val_index = shuffle_index[train_number:]
+        data_train = data[train_index]
+        label_train = label[train_index]
+        data_val = data[val_index]
+        label_val = label[val_index]
+        return (data_train, label_train), (data_val, label_val)
+
+    # Classification
+    num_nodes = 2  # Number of enhancement nodes.
+    regular_para = 1  # Regularization parameter.
+    weight_random_range = [-1, 1]  # Range of random weights.
+    bias_random_range = [0, 1]  # Range of random weights.
+
+    train, val, num_class = prepare_data_classify(0.8)
+    deep_rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
+                     b_random_vec_range=bias_random_range, activation='relu', same_feature=False,
+                     task_type='classification')
+    deep_rvfl.train(train[0], train[1], num_class)
+    prediction, proba = deep_rvfl.predict(val[0])
+    accuracy = deep_rvfl.eval(val[0], val[1])
+    print('Acc:', accuracy)
+
+    # Regression
+    num_nodes = 10  # Number of enhancement nodes.
+    regular_para = 1  # Regularization parameter.
+    weight_random_range = [-1, 1]  # Range of random weights.
+    bias_random_range = [0, 1]  # Range of random weights.
+
+    train, val = prepare_data_regression(0.8)
+    deep_rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
+                     b_random_vec_range=bias_random_range, activation='relu', same_feature=False,
+                     task_type='regression')
+    deep_rvfl.train(train[0], train[1], 0)
+    prediction = deep_rvfl.predict(val[0])
+    mae = deep_rvfl.eval(val[0], val[1])
+    print('MAE:', mae)
 
