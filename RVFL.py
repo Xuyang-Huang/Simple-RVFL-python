@@ -225,12 +225,12 @@ if __name__ == '__main__':
     bias_random_range = [0, 1]  # Range of random weights.
 
     train, val, num_class = prepare_data_classify(0.8)
-    deep_rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
+    rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
                      b_random_vec_range=bias_random_range, activation='relu', same_feature=False,
                      task_type='classification')
-    deep_rvfl.train(train[0], train[1], num_class)
-    prediction, proba = deep_rvfl.predict(val[0])
-    accuracy = deep_rvfl.eval(val[0], val[1])
+    rvfl.train(train[0], train[1], num_class)
+    prediction, proba = rvfl.predict(val[0])
+    accuracy = rvfl.eval(val[0], val[1])
     print('Acc:', accuracy)
 
     # Regression
@@ -240,11 +240,10 @@ if __name__ == '__main__':
     bias_random_range = [0, 1]  # Range of random weights.
 
     train, val = prepare_data_regression(0.8)
-    deep_rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
+    rvfl = RVFL(n_nodes=num_nodes, lam=regular_para, w_random_vec_range=weight_random_range,
                      b_random_vec_range=bias_random_range, activation='relu', same_feature=False,
                      task_type='regression')
-    deep_rvfl.train(train[0], train[1], 0)
-    prediction = deep_rvfl.predict(val[0])
-    mae = deep_rvfl.eval(val[0], val[1])
+    rvfl.train(train[0], train[1], 0)
+    prediction = rvfl.predict(val[0])
+    mae = rvfl.eval(val[0], val[1])
     print('MAE:', mae)
-
